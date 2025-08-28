@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>P2P Voice Chat (single-file)</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root{--bg:#0f1724;--card:#0b1220;--accent:#7c3aed}
+    *{box-sizing:border-box;font-family:Inter,system-ui,Segoe UI,Roboto,Arial}
+    body{margin:0;background:linear-gradient(180deg,#071023,#091124);color:#e6eef8}
+    .wrap{max-width:980px;margin:28px auto;padding:20px}
+    .card{background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));padding:16px;border-radius:12px;border:1px solid rgba(255,255,255,0.04)}
+    h1{margin:0 0 8px;font-size:20px}
+    label{font-size:13px;display:block;margin-top:8px;color:#cfe0ff}
+    input,button,select,textarea{padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.02);color:inherit}
+    .grid{display:grid;grid-template-columns:1fr 320px;gap:12px}
+    .sidebar{padding:12px}
+    .list{max-height:300px;overflow:auto;margin-top:8px;border-radius:8px;padding:8px;background:rgba(255,255,255,0.01)}
+    .user-row{display:flex;justify-content:space-between;align-items:center;padding:6px;border-radius:6px;margin-bottom:6px}
+    .btn{cursor:pointer}
+    .log{height:160px;overflow:auto;background:rgba(0,0,0,0.2);padding:8px;border-radius:8px;margin-top:8px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>P2P Voice Chat — single index.html</h1>
+      <p style="margin:0 0 12px;color:#bcd4ff;font-size:13px">Use a custom number to login. Call another user's number to start an audio call + text chat. This uses Firebase Realtime DB for signaling (client-side) and WebRTC for audio & datachannel. Paste your Firebase config in the code area below.</p>
+
+      <div class="grid">
+        <div>
+          <label>Firebase config (paste your project config object here)</label>
+          <textarea id="fbConfig" rows="4" style="width:100%;font-family:monospace;">{
+  // paste firebase config here
+}</textarea>
+          <label>Realtime DB path prefix (optional)</label>
+          <input id="dbPrefix" placeholder="e.g. p2p-chat" style="width:100%;margin-top:6px">
+
+          <label>Your custom number (login)</label>
+          <input id="myNumber" placeholder="e.g. 017xxxxxxxx" style="width:100%;margin-top:6px">
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button id="loginBtn" class="btn">Login</button>
+            <button id="logoutBtn" class="btn" disabled>Logout</button>
+            <button id="refreshBtn" class="btn">Refresh users</button>
+          </div>
+
+          <label style="margin-top:12px">Call / Chat</label>
+          <input id="targetNumber" placeholder="Call number (e.g. 018xxx)" style="width:100%">
+          <div style="display:flex;gap:8px;margin-top:8px">
+            <button id="callBtn" class="btn">Call</button>
+            <button id="hangupBtn" class="btn" disabled>Hangup</button>
+            <button id="answerBtn" class="btn" disabled>Answer</button>
+          </div>
+
+          <label style="margin-top:12px">Local status</label>
+          <div id="localStatus" style="padding:8px;border-radius:8px;background:rgba(255,255,255,0.02)">Logged out</div>
+
+          <label style="margin-top:12px">Chat (datachannel)</label>
+          <div style="display:flex;gap:8px;margin-top:6px">
+            <input id="chatInput" placeholder="Type message" style="flex:1">
+            <button id="sendChatBtn">Send</button>
+          </div>
+
+          <div class="log" id="events"></div>
+        </div>
+
+        <aside class="sidebar card">
+          <h3 style="margin:0 0 6px">Known users (Realtime DB)</h3>
+          <div class="list" id="usersList">(not logged in)</div>
+
+          <h3 style="margin-top:12px;margin-bottom:6px">Audio controls</h3>
+          <div style="display:flex;gap:8px">
+            <button id="muteBtn">Mute</button>
+            <button id="unmuteBtn">Unmute</button>
+          </div>
+          <div style="margin-top:10px">
+            <label>Local audio:</label>
+            <audio id="localAudio" autoplay muted style="width:100%;height:36px;background:#000;border-radius:6px"></audio>
+            <label style="margin-top:8px">Remote audio:</label>
+            <audio id="remoteAudio" autoplay style="width:100%;height:36px;background:#000;border-radius:6px"></audio>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </div>
+
+<script type="module">
+// Single-file P2P voice + chat using Firebase Realtime DB for signaling.
+// IMPORTANT: You must create a Firebase project, enable Realtime Database, and paste the config object above.
+// For testing, set Realtime DB rules to public (not for production):
+// {
+//   "rules": {
+//     ".read": true,
+//     ".write": true
+//   }
+// }
+
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.22.1/firebase-app.js';
+import { getDatabase, ref, set, onValue, get, child, update, push, remove } from 'https://www.gstatic.com/firebasejs/9.22.1/firebase-database.js';
+
+let app, db;
+let localStream, pc, dataChannel;
+let myNumber = '';
+let targetNumber = '';
+let callId = null;
+let prefix = '';
+
+const logEl = id('events');
+const usersListEl = id('usersList');
+const localStatusEl = id('localStatus');
+const remoteAudio = id('remoteAudio');
+const localAudio = id('localAudio');
+
+function id(i){return document.getElementById(i)}
+function log(msg){ const p = document.createElement('div'); p.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`; logEl.prepend(p);} 
+
+// Helper: set up Firebase from config text
+id('loginBtn').addEventListener('click', async ()=>{
+  try{
+    const confText = id('fbConfig').value.trim();
+    if(!confText){ alert('Paste Firebase config first'); return; }
+    const conf = JSON.parse(confText.replace(/\/\/.*$/gm,'')); // naive strip comments
+    prefix = id('dbPrefix').value.trim() || 'p2p_chat';
+    initFirebase(conf);
+    myNumber = id('myNumber').value.trim();
+    if(!myNumber){ alert('Enter your custom number'); return; }
+    await startLocalMedia();
+    await registerPresence();
+    listenIncoming();
+    refreshUsers();
+    id('logoutBtn').disabled = false; id('loginBtn').disabled = true; localStatusEl.textContent = 'Logged in as ' + myNumber;
+    log('Logged in and ready');
+  }catch(e){ console.error(e); alert('Error: ' + e.message); }
+});
+
+id('logoutBtn').addEventListener('click', async ()=>{
+  await cleanupCall();
+  await remove(ref(db, `${prefix}/users/${myNumber}`));
+  myNumber=''; id('logoutBtn').disabled=true; id('loginBtn').disabled=false; localStatusEl.textContent='Logged out'; log('Logged out');
+});
+
+id('refreshBtn').addEventListener('click', refreshUsers);
+
+id('callBtn').addEventListener('click', ()=>{
+  targetNumber = id('targetNumber').value.trim();
+  if(!targetNumber) return alert('Enter target number');
+  startCall(targetNumber);
+});
+
+id('answerBtn').addEventListener('click', ()=>{
+  id('answerBtn').disabled=true; answerCall();
+});
+
+id('hangupBtn').addEventListener('click', async ()=>{ await hangup(); });
+
+id('sendChatBtn').addEventListener('click', ()=>{
+  const t = id('chatInput').value.trim(); if(!t || !dataChannel || dataChannel.readyState!=='open') return; dataChannel.send(t); appendChat('Me', t); id('chatInput').value='';
+});
+
+id('muteBtn').addEventListener('click', ()=>{ if(localStream) localStream.getAudioTracks().forEach(t=>t.enabled=false); });
+id('unmuteBtn').addEventListener('click', ()=>{ if(localStream) localStream.getAudioTracks().forEach(t=>t.enabled=true); });
+
+// init firebase
+function initFirebase(conf){
+  if(app) return; app = initializeApp(conf); db = getDatabase(app); log('Firebase initialized');
+}
+
+async function startLocalMedia(){
+  localStream = await navigator.mediaDevices.getUserMedia({ audio:true });
+  // preview local
+  localAudio.srcObject = localStream;
+  log('Local audio ready');
+}
+
+async function registerPresence(){
+  const userRef = ref(db, `${prefix}/users/${myNumber}`);
+  await set(userRef, { online:true, timestamp: Date.now() });
+  // keep alive: update timestamp every 25s
+  setInterval(()=> set(userRef, { online:true, timestamp: Date.now() }), 25000);
+}
+
+// list users
+async function refreshUsers(){
+  usersListEl.innerHTML='';
+  const snapshot = await get(ref(db, `${prefix}/users`));
+  const data = snapshot.exists() ? snapshot.val() : {};
+  for(const num in data){
+    const div = document.createElement('div'); div.className='user-row';
+    const left = document.createElement('div'); left.textContent = num + (num===myNumber? ' (you)':'');
+    const btn = document.createElement('button'); btn.textContent='Call'; btn.onclick = ()=>{ id('targetNumber').value=num; startCall(num); };
+    div.appendChild(left); div.appendChild(btn); usersListEl.appendChild(div);
+  }
+}
+
+// listen for incoming offers (calls)
+function listenIncoming(){
+  const callsRef = ref(db, `${prefix}/calls/${myNumber}`);
+  onValue(callsRef, async (snap)=>{
+    const val = snap.val();
+    if(!val) return;
+    // expect structure: calls/{callee}/{caller} = {offer:..., callerCandidates: { ... } }
+    for(const caller in val){
+      const call = val[caller];
+      if(call && call.offer && !pc){
+        log(`Incoming call from ${caller}`);
+        // store callId: myNumber/caller
+        callId = `${myNumber}_${caller}`;
+        targetNumber = caller;
+        // save the offer to a variable and enable answer
+        window._incomingOffer = call.offer;
+        window._incomingCandidates = call.callerCandidates || {};
+        id('answerBtn').disabled = false;
+        id('hangupBtn').disabled = false;
+      }
+    }
+  });
+}
+
+async function startCall(target){
+  try{
+    callId = `${target}_${myNumber}`; // caller is me, callee is target -> store under calls/target/myNumber
+    await createPeerConnection(true);
+    dataChannel = pc.createDataChannel('chat');
+    setupDataChannel();
+
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    // write offer to DB under calls/target/myNumber
+    const callRef = ref(db, `${prefix}/calls/${target}/${myNumber}`);
+    await set(callRef, { offer: offer.toJSON() });
+
+    // listen for answer
+    onValue(ref(db, `${prefix}/calls/${target}/${myNumber}/answer`), async (snap)=>{
+      const val = snap.val(); if(!val) return; const answer = val;
+      await pc.setRemoteDescription(answer);
+      log('Received answer');
+    });
+
+    // listen for callee ICE candidates
+    onValue(ref(db, `${prefix}/calls/${target}/${myNumber}/calleeCandidates`), (snap)=>{
+      const cands = snap.val()||{}; for(const k in cands){ try{ pc.addIceCandidate(cands[k]); }catch(e){}}
+    });
+
+    // upload caller ICE candidates as they come
+    const callerCandRef = ref(db, `${prefix}/calls/${target}/${myNumber}/callerCandidates`);
+    pc.onicecandidate = (e)=>{ if(e.candidate) push(callerCandRef, e.candidate.toJSON()); };
+
+    id('hangupBtn').disabled = false;
+    log('Calling ' + target);
+  }catch(e){console.error(e); alert('Call error: '+e.message);} 
+}
+
+async function answerCall(){
+  try{
+    if(!window._incomingOffer) return;
+    await createPeerConnection(false);
+    // set remote
+    await pc.setRemoteDescription(window._incomingOffer);
+    // add any already-sent caller candidates
+    const callerCandidates = window._incomingCandidates||{}; for(const k in callerCandidates) try{ await pc.addIceCandidate(callerCandidates[k]); }catch(e){}
+
+    const answer = await pc.createAnswer();
+    await pc.setLocalDescription(answer);
+    // write answer to DB under calls/{caller}/{myNumber}/answer
+    const caller = targetNumber; // targetNumber was set when incoming received as caller
+    const answerRef = ref(db, `${prefix}/calls/${caller}/${myNumber}/answer`);
+    await set(answerRef, answer.toJSON());
+
+    // listen for caller candidates added later
+    onValue(ref(db, `${prefix}/calls/${caller}/${myNumber}/callerCandidates`), (snap)=>{
+      const cands = snap.val()||{}; for(const k in cands) try{ pc.addIceCandidate(cands[k]); }catch(e){}
+    });
+
+    // push callee candidates
+    const calleeCandRef = ref(db, `${prefix}/calls/${caller}/${myNumber}/calleeCandidates`);
+    pc.onicecandidate = (e)=>{ if(e.candidate) push(calleeCandRef, e.candidate.toJSON()); };
+
+    id('answerBtn').disabled = true; id('hangupBtn').disabled = false;
+    log('Answered call to ' + caller);
+  }catch(e){console.error(e); alert('Answer error: '+e.message);} 
+}
+
+async function createPeerConnection(isCaller){
+  const servers = { iceServers: [ { urls: 'stun:stun.l.google.com:19302' } ] }; // add TURN servers for reliability in production
+  pc = new RTCPeerConnection(servers);
+  // add local audio track
+  for(const t of localStream.getTracks()) pc.addTrack(t, localStream);
+
+  pc.ontrack = (e)=>{
+    remoteAudio.srcObject = e.streams[0]; log('Remote audio connected');
+  };
+  pc.ondatachannel = (ev)=>{ dataChannel = ev.channel; setupDataChannel(); };
+  pc.onconnectionstatechange = ()=>{ log('Connection state: ' + pc.connectionState); if(pc.connectionState==='connected'){} };
+}
+
+function setupDataChannel(){
+  dataChannel.onopen = ()=>{ log('Chat channel open'); };
+  dataChannel.onmessage = (e)=>{ appendChat(targetNumber, e.data); };
+}
+
+function appendChat(who, text){ const p=document.createElement('div'); p.textContent=`${who}: ${text}`; logEl.appendChild(p); logEl.scrollTop = logEl.scrollHeight; }
+
+async function hangup(){
+  if(!callId && !pc){ return; }
+  try{ await cleanupCall(); }catch(e){}
+}
+
+async function cleanupCall(){
+  if(pc){ pc.close(); pc=null; }
+  dataChannel = null; window._incomingOffer = null; window._incomingCandidates = null;
+  id('hangupBtn').disabled = true; id('answerBtn').disabled = true;
+  // remove any call objects in DB we created
+  if(myNumber && targetNumber){ // remove both directions for safety
+    await remove(ref(db, `${prefix}/calls/${targetNumber}/${myNumber}`));
+    await remove(ref(db, `${prefix}/calls/${myNumber}/${targetNumber}`));
+  }
+  log('Call cleaned up');
+}
+
+// when page unload, cleanup presence
+window.addEventListener('beforeunload', async ()=>{ if(myNumber && db) await remove(ref(db, `${prefix}/users/${myNumber}`)); });
+
+</script>
+
+</body>
+</html>
