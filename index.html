@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RHS AI Assistant</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Figtree:wght@400;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root{--bg:#0b1020;--accent:#7c3aed;--accent-2:#22d3ee;--card:#101735;}
+    html,body{height:100%}
+    body{font-family:Inter,ui-sans-serif,system-ui,Segoe UI,Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji";}
+    .gradient-bg{background: radial-gradient(1200px 600px at 80% -10%, rgba(124,58,237,.25), transparent 70%),
+                              radial-gradient(800px 400px at 10% 110%, rgba(34,211,238,.15), transparent 70%),
+                              linear-gradient(180deg, #0b1020 0%, #0b1020 100%);}    
+    .glass{backdrop-filter: blur(12px); background: rgba(16, 23, 53, .6);}
+    .chat-scroll{scroll-behavior:smooth}
+    .msg{animation: fadeIn .2s ease-out}
+    @keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+    .shadow-soft{box-shadow: 0 10px 25px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.02)}
+    .ring-gradient{box-shadow: 0 0 0 1px rgba(255,255,255,.06), 0 0 0 8px rgba(124,58,237,.15)}
+    .bubble{background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03)); border:1px solid rgba(255,255,255,.08)}
+    .btn{transition: transform .08s ease;}
+    .btn:active{transform:translateY(1px)}
+    .logo-grad{background:linear-gradient(90deg, #a78bfa, #22d3ee); -webkit-background-clip:text; background-clip:text; color:transparent}
+    .mono{font-variant-ligatures: none; font-feature-settings: normal}
+  </style>
+</head>
+<body class="gradient-bg text-slate-100">
+  <!-- Header -->
+  <header class="sticky top-0 z-10">
+    <div class="mx-auto max-w-6xl px-4 sm:px-6 py-4">
+      <div class="glass ring-1 ring-white/10 rounded-2xl p-3 sm:p-4 flex items-center justify-between shadow-soft">
+        <div class="flex items-center gap-3">
+          <!-- RHS Logo -->
+          <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-violet-500 to-cyan-400 grid place-items-center ring-2 ring-white/20">
+            <span class="font-black text-slate-900">R</span>
+          </div>
+          <div>
+            <div class="text-lg sm:text-xl font-extrabold tracking-tight logo-grad">RHS AI Assistant</div>
+            <div class="text-xs text-slate-300/80">English & Bangla • ChatGPT‑style answers</div>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="settingsBtn" class="btn px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 ring-1 ring-white/10 text-sm">Settings</button>
+          <a href="#" class="hidden sm:inline text-xs text-slate-400 hover:text-slate-200">v1.0</a>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main -->
+  <main class="mx-auto max-w-6xl px-4 sm:px-6">
+    <div class="grid lg:grid-cols-[380px,1fr] gap-4 sm:gap-6">
+      <!-- Sidebar / Tips -->
+      <aside class="hidden lg:block">
+        <div class="glass ring-1 ring-white/10 rounded-2xl p-5 shadow-soft sticky top-24">
+          <h3 class="font-semibold text-slate-200 mb-3">Quick Controls</h3>
+          <div class="space-y-3 text-sm text-slate-300/90">
+            <div class="flex items-center justify-between">
+              <label for="langSelect">Voice language</label>
+              <select id="langSelect" class="bg-white/5 ring-1 ring-white/10 rounded-lg px-2 py-1">
+                <option value="auto">Auto</option>
+                <option value="en-US">English (US)</option>
+                <option value="bn-BD">Bangla (BD)</option>
+              </select>
+            </div>
+            <div class="flex items-center justify-between">
+              <label for="ttsToggle">Voice replies</label>
+              <input id="ttsToggle" type="checkbox" class="h-4 w-4 rounded border-slate-600" checked>
+            </div>
+            <div class="flex items-center justify-between">
+              <label for="modelSelect">Model</label>
+              <select id="modelSelect" class="bg-white/5 ring-1 ring-white/10 rounded-lg px-2 py-1">
+                <option value="gpt-4o-mini">gpt-4o-mini</option>
+                <option value="gpt-4.1-mini">gpt-4.1-mini</option>
+                <option value="gpt-4o">gpt-4o</option>
+              </select>
+            </div>
+            <div class="flex items-center justify-between">
+              <label for="tempRange">Creativity</label>
+              <input id="tempRange" type="range" min="0" max="1" step="0.05" value="0.4">
+            </div>
+            <p class="text-xs text-slate-400">Tip: Click the mic to speak. Use Settings to add your OpenAI API key.</p>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Chat Card -->
+      <section class="glass ring-1 ring-white/10 rounded-2xl p-3 sm:p-4 shadow-soft min-h-[70vh] flex flex-col">
+        <!-- Messages -->
+        <div id="messages" class="chat-scroll flex-1 overflow-y-auto px-2 sm:px-3 space-y-4">
+          <div class="msg flex gap-3 items-start">
+            <div class="shrink-0 w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-cyan-400 grid place-items-center font-black text-slate-900">R</div>
+            <div class="bubble rounded-2xl px-4 py-3 max-w-[85%]">
+              <div class="text-sm leading-relaxed text-slate-200">
+                Hi/হাই! I’m <span class="font-semibold">RHS AI Assistant</span> — ask me anything in English or Bangla.
+                <div class="mt-2 text-xs text-slate-400">Use the <strong>Settings</strong> button to add your API key and enable full answers.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Composer -->
+        <div class="mt-3 border-t border-white/10 pt-3">
+          <div class="flex items-end gap-2">
+            <textarea id="input" rows="1" placeholder="Type a message… / বাংলায় লিখুন…" class="flex-1 resize-none rounded-2xl bg-white/5 ring-1 ring-white/10 focus:ring-2 focus:ring-violet-500/60 px-4 py-3 placeholder:text-slate-500"></textarea>
+            <button id="micBtn" title="Start voice" class="btn p-3 rounded-xl bg-white/5 ring-1 ring-white/10 hover:bg-white/10">🎤</button>
+            <button id="stopMicBtn" title="Stop" class="btn p-3 rounded-xl bg-white/5 ring-1 ring-white/10 hover:bg-white/10 hidden">⏹️</button>
+            <button id="sendBtn" class="btn px-4 py-3 rounded-2xl bg-gradient-to-r from-violet-500 to-cyan-400 text-slate-900 font-semibold">Send</button>
+          </div>
+          <div class="mt-2 flex items-center justify-between text-[11px] text-slate-400">
+            <div class="mono">Status: <span id="status">Idle</span></div>
+            <button id="clearBtn" class="text-slate-500 hover:text-slate-200">Clear chat</button>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- Settings Modal -->
+  <div id="settingsModal" class="fixed inset-0 hidden items-center justify-center">
+    <div class="absolute inset-0 bg-black/60"></div>
+    <div class="relative z-10 w-full max-w-lg mx-4 p-6 rounded-2xl glass ring-1 ring-white/10">
+      <h2 class="text-xl font-bold mb-2">Settings</h2>
+      <p class="text-sm text-slate-300/90 mb-4">Paste your <span class="font-semibold">OpenAI API Key</span> to enable real ChatGPT‑style answers in both English and Bangla.</p>
+      <label class="block text-sm mb-1">API Key</label>
+      <input id="apiKeyInput" type="password" placeholder="sk-..." class="w-full rounded-xl bg-white/5 ring-1 ring-white/10 px-3 py-2">
+      <div class="flex items-center justify-between mt-4">
+        <label class="flex items-center gap-2 text-sm"><input id="saveKeyToggle" type="checkbox" class="h-4 w-4 rounded" checked> Save in this browser</label>
+        <div class="flex gap-2">
+          <button id="testKeyBtn" class="btn px-3 py-2 rounded-xl bg-white/5 ring-1 ring-white/10 hover:bg-white/10">Test</button>
+          <button id="closeSettingsBtn" class="btn px-3 py-2 rounded-xl bg-gradient-to-r from-violet-500 to-cyan-400 text-slate-900 font-semibold">Done</button>
+        </div>
+      </div>
+      <p class="text-xs text-slate-400 mt-4">Your key stays in your browser and is sent only to OpenAI.</p>
+    </div>
+  </div>
+
+  <script>
+    // ------- UTIL -------
+    const el = (q, root=document) => root.querySelector(q);
+    const els = (q, root=document) => [...root.querySelectorAll(q)];
+    const messagesEl = el('#messages');
+    const inputEl = el('#input');
+    const statusEl = el('#status');
+    const ttsToggle = el('#ttsToggle');
+    const langSelect = el('#langSelect');
+
+    const state = {
+      apiKey: localStorage.getItem('rhs_api_key') || '',
+      model: localStorage.getItem('rhs_model') || 'gpt-4o-mini',
+      temperature: parseFloat(localStorage.getItem('rhs_temp') || '0.4'),
+      speaking: false,
+      recognizing: false,
+      convo: [
+        {role:'system', content: `You are RHS AI Assistant. You understand and answer in Bangla and English. \nRules: \n- Reply in the language the user uses. If the user mixes Bangla & English, you may mix naturally. \n- Keep answers clear and helpful. \n- For code, prefer concise snippets. \n- If asked about how you work, explain simply. \n- Be friendly and respectful.`}
+      ],
+    };
+
+    // init dropdown values
+    el('#modelSelect').value = state.model;
+    el('#tempRange').value = state.temperature;
+
+    // ------- CHAT UI -------
+    function addMessage(role, html){
+      const wrapper = document.createElement('div');
+      wrapper.className = 'msg flex gap-3 items-start';
+      const isUser = role === 'user';
+      wrapper.innerHTML = `
+        <div class="shrink-0 w-9 h-9 rounded-xl ${isUser ? 'bg-white/10 ring-1 ring-white/10' : 'bg-gradient-to-br from-violet-500 to-cyan-400'} grid place-items-center font-black ${isUser ? 'text-slate-300' : 'text-slate-900'}">${isUser ? 'U' : 'R'}</div>
+        <div class="bubble rounded-2xl px-4 py-3 max-w-[85%] text-sm leading-relaxed text-slate-200 whitespace-pre-wrap">${html}</div>`;
+      messagesEl.appendChild(wrapper);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    function setStatus(s){ statusEl.textContent = s; }
+
+    function detectLang(text){
+      // crude check for Bangla script
+      const hasBn = /[\u0980-\u09FF]/.test(text);
+      return hasBn ? 'bn' : 'en';
+    }
+
+    // ------- OPENAI CALL -------
+    async function askOpenAI(prompt){
+      const model = el('#modelSelect').value;
+      const temperature = parseFloat(el('#tempRange').value);
+      const body = { model, temperature, messages: [...state.convo, {role:'user', content: prompt}] };
+
+      const resp = await fetch('https://api.openai.com/v1/chat/completions',{
+        method:'POST',
+        headers:{
+          'Content-Type':'application/json',
+          'Authorization': 'Bearer ' + state.apiKey
+        },
+        body: JSON.stringify(body)
+      });
+
+      if(!resp.ok){
+        const errText = await resp.text();
+        throw new Error('OpenAI API error: ' + errText);
+      }
+      const data = await resp.json();
+      return data.choices?.[0]?.message?.content || '';
+    }
+
+    // ------- OFFLINE FALLBACK (simple demo) -------
+    async function offlineBrain(q){
+      const lang = detectLang(q);
+      const lower = q.trim().toLowerCase();
+      let a = '';
+      if(/\b(hi|hello|hey)\b/.test(lower) || /\b(কেমন|হ্যালো|হাই)\b/.test(q)){
+        a = lang==='bn' ? 'হাই! আমি RHS AI Assistant। আমার পুরো শক্তি পেতে Settings এ গিয়ে API Key দিন।' : 'Hi! I\'m RHS AI Assistant. Add your API key in Settings to unlock full answers.';
+      } else if(/who are you|tumi ke|ke tumi/i.test(q)){
+        a = lang==='bn' ? 'আমি RHS AI Assistant—বাংলা ও ইংরেজি দুই ভাষাতেই কথা বলতে পারি।' : 'I\'m RHS AI Assistant—happy to help in English or Bangla.';
+      } else if(/what.*chatgpt|chatgpt.*kivabe/i.test(lower)){
+        a = lang==='bn' ? 'ChatGPT অনেক লেখার উদাহরণ থেকে শেখা ভাষা মডেল। এটা প্যাটার্ন মিলিয়ে নতুন উত্তর তৈরি করে।' : 'ChatGPT is a language model trained on lots of text; it predicts words to craft answers.';
+      } else {
+        a = lang==='bn' ? 'ডেমো মোডে আছি—সঠিক উত্তর পেতে Settings থেকে OpenAI API key যোগ করুন।' : 'This is demo mode—add an OpenAI API key in Settings for real answers.';
+      }
+      return a;
+    }
+
+    // ------- TTS -------
+    function speak(text){
+      if(!ttsToggle.checked) return;
+      const lang = detectLang(text) === 'bn' ? 'bn-BD' : 'en-US';
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = (langSelect.value === 'auto') ? lang : langSelect.value;
+      window.speechSynthesis.cancel();
+      window.speechSynthesis.speak(u);
+    }
+
+    // ------- STT (Web Speech API) -------
+    let rec;
+    function initRec(){
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if(!SR) return null;
+      const r = new SR();
+      r.interimResults = true;
+      r.continuous = true;
+      r.lang = (langSelect.value === 'auto') ? 'en-US' : langSelect.value; // start with something; we can adapt later
+      r.onresult = (e)=>{
+        const t = Array.from(e.results).map(r=>r[0].transcript).join(' ');
+        inputEl.value = t;
+        autoResize();
+      };
+      r.onstart = ()=>{ setStatus('Listening…'); state.recognizing = true; el('#micBtn').classList.add('hidden'); el('#stopMicBtn').classList.remove('hidden'); };
+      r.onend = ()=>{ setStatus('Idle'); state.recognizing = false; el('#micBtn').classList.remove('hidden'); el('#stopMicBtn').classList.add('hidden'); };
+      r.onerror = ()=>{ setStatus('Mic error'); };
+      return r;
+    }
+
+    // ------- SEND FLOW -------
+    async function send(){
+      const text = inputEl.value.trim();
+      if(!text) return;
+      inputEl.value = ''; autoResize();
+      addMessage('user', escapeHtml(text));
+      setStatus('Thinking…');
+      try{
+        let answer;
+        if(state.apiKey){
+          answer = await askOpenAI(text);
+        } else {
+          answer = await offlineBrain(text);
+        }
+        addMessage('assistant', renderMarkdown(answer));
+        speak(answer);
+        state.convo.push({role:'user', content:text},{role:'assistant', content:answer});
+        setStatus('Idle');
+      } catch(err){
+        console.error(err);
+        addMessage('assistant', `<span class="text-rose-300">${escapeHtml(err.message)}</span>`);
+        setStatus('Error');
+      }
+    }
+
+    // ------- MARKDOWN MINi -------
+    function renderMarkdown(md){
+      // very tiny renderer for bold, code, and newlines
+      let html = escapeHtml(md)
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/`([^`]+)`/g, '<code class="bg-white/10 px-1 rounded">$1</code>')
+        .replace(/\n/g,'<br>');
+      // code fences
+      html = html.replace(/```([\s\S]*?)```/g, (m, code)=>{
+        return `<pre class="mono bg-black/40 border border-white/10 rounded-xl p-3 overflow-auto">${escapeHtml(code)}</pre>`;
+      });
+      return html;
+    }
+
+    function escapeHtml(s){
+      return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
+    }
+
+    // ------- INPUT RESIZE -------
+    function autoResize(){
+      inputEl.style.height = 'auto';
+      inputEl.style.height = Math.min(160, inputEl.scrollHeight) + 'px';
+    }
+    inputEl.addEventListener('input', autoResize);
+
+    // ------- EVENTS -------
+    el('#sendBtn').addEventListener('click', send);
+    inputEl.addEventListener('keydown', (e)=>{
+      if((e.key === 'Enter' && !e.shiftKey)){
+        e.preventDefault();
+        send();
+      }
+    });
+
+    el('#clearBtn').addEventListener('click', ()=>{
+      messagesEl.innerHTML = '';
+      state.convo = state.convo.slice(0,1);
+      addMessage('assistant', 'Cleared. Start a new conversation!');
+    });
+
+    // mic
+    el('#micBtn').addEventListener('click', ()=>{
+      if(!rec){ rec = initRec(); }
+      if(!rec){ alert('Speech recognition not supported in this browser.'); return; }
+      rec.lang = (langSelect.value === 'auto') ? 'en-US' : langSelect.value; // user selected
+      rec.start();
+    });
+    el('#stopMicBtn').addEventListener('click', ()=>{ if(rec && state.recognizing) rec.stop(); });
+
+    // settings modal
+    const settingsModal = el('#settingsModal');
+    el('#settingsBtn').addEventListener('click', ()=>{
+      settingsModal.classList.remove('hidden');
+      settingsModal.classList.add('flex');
+      el('#apiKeyInput').value = state.apiKey || '';
+    });
+    el('#closeSettingsBtn').addEventListener('click', ()=>{
+      settingsModal.classList.add('hidden');
+      settingsModal.classList.remove('flex');
+    });
+
+    el('#testKeyBtn').addEventListener('click', async ()=>{
+      const key = el('#apiKeyInput').value.trim();
+      if(!key){ alert('Enter a key first.'); return; }
+      try{
+        const ok = await fetch('https://api.openai.com/v1/models', { headers: { 'Authorization': 'Bearer ' + key } });
+        if(ok.status === 200){ alert('API key looks valid!'); }
+        else{ alert('Could not verify key. Status: ' + ok.status); }
+      }catch{ alert('Network error while checking key.'); }
+    });
+
+    el('#apiKeyInput').addEventListener('input', (e)=>{
+      state.apiKey = e.target.value.trim();
+      if(el('#saveKeyToggle').checked){ localStorage.setItem('rhs_api_key', state.apiKey); }
+    });
+    el('#saveKeyToggle').addEventListener('change', (e)=>{
+      if(e.target.checked){ localStorage.setItem('rhs_api_key', state.apiKey); }
+      else{ localStorage.removeItem('rhs_api_key'); }
+    });
+
+    el('#modelSelect').addEventListener('change', (e)=>{
+      state.model = e.target.value; localStorage.setItem('rhs_model', state.model);
+    });
+
+    el('#tempRange').addEventListener('input', (e)=>{
+      state.temperature = parseFloat(e.target.value); localStorage.setItem('rhs_temp', state.temperature);
+    });
+
+    // ------- WELCOME EXAMPLES -------
+    const examples = [
+      'বাংলায় বলো: ChatGPT কীভাবে কাজ করে?',
+      'Explain binary search with a short JS example.',
+      'একটা অনুপ্রেরণামূলক ছোট্ট মেসেজ দাও।',
+      'Translate: “আমি আজকে খুব খুশি।” to English.'
+    ];
+    setTimeout(()=>{
+      addMessage('assistant', 'Try one:\n• ' + examples.join('\n• '));
+    }, 400);
+  </script>
+</body>
+</html>
